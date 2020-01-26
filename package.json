@@ -6,7 +6,7 @@
   "main": "src/index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/s1ckn3zz1337/ms-directline-slim.git"
+    "url": "https://github.com/s1ckn3zz1337/ms-directline-client-node.git"
   },
   "author": "Alexander Kirilyuk, s1ckn3zz1337@git",
   "dependencies": {
