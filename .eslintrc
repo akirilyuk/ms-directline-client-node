@@ -1,0 +1,12 @@
+{
+  "env": {
+    "jest/globals": true
+  },
+  "extends": ["airbnb-base", "prettier"],
+  "plugins": ["prettier", "jest"],
+  "rules": {
+    "prettier/prettier": "error",
+    "no-async-promise-executor": "off",
+    "max-classes-per-file": "off"
+  }
+}
