@@ -1,5 +1,5 @@
 {
-  "name": "ms-directline-slim",
+  "name": "ms-directline-client-node",
   "version": "1.0.0",
   "description": "Slim HTTP polling MS Directline v3 Client",
   "license": "(MIT OR Apache-2.0)",
