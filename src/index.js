@@ -33,7 +33,7 @@ class Conversation extends EventEmitter {
    * @param userId {string} userId of the consumer
    * @param msDirectLineSecret {string} directline secret
    * @param msDirectLineEndpoint {string} directline endpoint
-   * @param config connector config
+   * @param config {polling:{boolean}, autoReconnect:{boolean}} connector config
    * @returns {Promise<Conversation>} return a new instance, else throws
    */
   static async start({

@@ -1,6 +1,6 @@
 {
-  "name": "ms-directline-slim",
-  "version": "0.0.1",
+  "name": "ms-directline-client-node",
+  "version": "1.0.0",
   "description": "Slim HTTP polling MS Directline v3 Client",
   "license": "(MIT OR Apache-2.0)",
   "main": "src/index.js",
@@ -75,6 +75,5 @@
   "engines": {
     "node": ">=12.13.0",
     "npm": ">=6.4.0"
-  },
-  "private": true
+  }
 }
