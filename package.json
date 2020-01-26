@@ -1,0 +1,79 @@
+{
+  "name": "ms-directline-client-node",
+  "version": "1.0.0",
+  "description": "Slim HTTP polling MS Directline v3 Client",
+  "license": "(MIT OR Apache-2.0)",
+  "main": "src/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s1ckn3zz1337/ms-directline-slim.git"
+  },
+  "author": "Alexander Kirilyuk, s1ckn3zz1337@git",
+  "dependencies": {
+    "axios": "0.19.2",
+    "axios-retry": "^3.1.2",
+    "dotenv": "8.2.0",
+    "ws": "7.2.1"
+  },
+  "devDependencies": {
+    "commitizen": "4.0.3",
+    "cz-gitmoji": "0.0.7",
+    "eslint": "6.8.0",
+    "eslint-config-airbnb-base": "14.0.0",
+    "eslint-config-prettier": "6.9.0",
+    "eslint-plugin-import": "2.20.0",
+    "eslint-plugin-jest": "23.6.0",
+    "eslint-plugin-prettier": "3.1.2",
+    "husky": "4.0.7",
+    "nock": "11.7.2",
+    "jest": "24.9.0",
+    "jest-extended": "0.11.2",
+    "jest-junit-reporter": "1.1.0",
+    "jest-teamcity-reporter": "0.9.0",
+    "jsinspect": "0.12.7",
+    "prettier": "1.19.1",
+    "prettier-eslint-cli": "5.0.0",
+    "synp": "1.7.0"
+  },
+  "resolutions": {
+    "**/braces": "3.0.2",
+    "**/js-yaml": "3.13.1",
+    "**/marked": "0.8.0",
+    "**/tar": "5.0.5",
+    "**/handlebars": "4.5.3",
+    "**/fstream": "1.0.12",
+    "**/lodash": "^4.17.15",
+    "**/lodash.merge": "4.6.2",
+    "**/mixin-deep": "2.0.1",
+    "**/set-value": "3.0.1",
+    "**/jest-leak-detector": "^24.9.0",
+    "**/babel-preset-jest": "^24.9.0",
+    "**/eslint-utils": "2.0.0"
+  },
+  "scripts": {
+    "format": "prettier-eslint --write \"src/**/*.js\" \"test/**/*.js\"",
+    "security": "yarn audit --groups dependencies optionalDependencies",
+    "outofdate": "yarn outdated OUTDATED_RESULT=$? && exit $OUTDATED_RESULT",
+    "duplicated": "jsinspect -t 30 ./src",
+    "lint": "eslint .",
+    "test": "export NODE_ENV=TEST && yarn jest -i",
+    "commit": "git-cz",
+    "release:patch": "npm version patch && git push && npm publish",
+    "release:minor": "npm version minor && git push && npm publish",
+    "release:major": "npm version major && git push && npm publish"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-gitmoji"
+    }
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "yarn lint && yarn duplicated && yarn test"
+    }
+  },
+  "engines": {
+    "node": ">=12.13.0",
+    "npm": ">=6.4.0"
+  }
+}
