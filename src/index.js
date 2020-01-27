@@ -5,6 +5,8 @@ const axios = require('axios').create();
 const EventEmitter = require('events');
 const WebSocket = require('ws');
 
+const ClientError = require('./ClientError');
+
 // Exponential back-off retry delay between requests
 axiosRetry(axios, { retryDelay: axiosRetry.exponentialDelay, retries: 3 });
 
@@ -15,15 +17,17 @@ const EVENTS = {
 };
 
 const ERROR_CODES = {
-  wsParsingFailed: 'ws-parsing-failed',
-  wsError: 'ws-error',
-  wsReconnectErr: 'reconnect-error',
-  pollingError: 'polling-error'
+  wsParsingFailed: 'ws-parsing-failed', // parsing of data received via ws failed
+  wsError: 'ws-error', // general ws connection error
+  wsReconnectErr: 'reconnect-error', // recreating a new ws stream and reconnecting failed
+  pollingError: 'polling-error', // failed polling via HTTP GET
+  refreshError: 'token-refresh-error', // failed to refresh token
+  creationFailed: 'creationFailed' // failed to create object, mostly because conversation call failed
 };
 
 const defaultConfig = {
-  polling: false,
-  autoReconnect: true
+  polling: false, // disable polling per default
+  autoReconnect: true // reconnect ws connection on default
 };
 
 class Conversation extends EventEmitter {
@@ -33,7 +37,8 @@ class Conversation extends EventEmitter {
    * @param userId {string} userId of the consumer
    * @param msDirectLineSecret {string} directline secret
    * @param msDirectLineEndpoint {string} directline endpoint
-   * @param config {polling:{boolean}, autoReconnect:{boolean}} connector config
+   * @param config {polling:{boolean}, autoReconnect:{boolean}} connector config set polling to true to enable polling instead of ws,
+   * autoReconnect true to auto reconnect ws connection on socket closed
    * @returns {Promise<Conversation>} return a new instance, else throws
    */
   static async start({
@@ -42,27 +47,35 @@ class Conversation extends EventEmitter {
     msDirectLineEndpoint,
     config
   }) {
-    const {
-      // eslint-disable-next-line camelcase
-      data: { conversationId, token, expires_in, streamUrl }
-    } = await axios.post(
-      `${msDirectLineEndpoint}/conversations`,
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${msDirectLineSecret}`
+    try {
+      const {
+        // eslint-disable-next-line camelcase
+        data: { conversationId, token, expires_in, streamUrl }
+      } = await axios.post(
+        `${msDirectLineEndpoint}/conversations`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${msDirectLineSecret}`
+          }
         }
-      }
-    );
-    return new Conversation({
-      conversationId,
-      token,
-      expires_in,
-      userId,
-      msDirectLineEndpoint,
-      config,
-      streamUrl
-    });
+      );
+      return new Conversation({
+        conversationId,
+        token,
+        expires_in,
+        userId,
+        msDirectLineEndpoint,
+        msDirectLineSecret,
+        config,
+        streamUrl
+      });
+    } catch (error) {
+      throw new ClientError({
+        message: ERROR_CODES.creationFailed,
+        error
+      });
+    }
   }
 
   /**
@@ -72,6 +85,7 @@ class Conversation extends EventEmitter {
    * @param expires_in {number} expiration time
    * @param streamUrl {string} ws stream url
    * @param msDirectLineEndpoint {string} ms Directline domain
+   * @param msDirectLineSecret {string} ms Directline secret
    * @param userId {string} consumer user id
    * @param config {Object} conversation configuration
    */
@@ -81,6 +95,7 @@ class Conversation extends EventEmitter {
     expires_in,
     streamUrl,
     msDirectLineEndpoint,
+    msDirectLineSecret,
     userId,
     config
   }) {
@@ -92,6 +107,7 @@ class Conversation extends EventEmitter {
 
     this.expires_in = expires_in;
     this.steamUrl = streamUrl;
+    this.msDirectlineSecret = msDirectLineSecret;
     this.msDirectLineEndpoint = msDirectLineEndpoint;
     this.watermarkId = null;
     this.activities = [];
@@ -100,6 +116,8 @@ class Conversation extends EventEmitter {
     if (!this.config.polling) {
       this.createNewWsStream();
     }
+    this.refreshTimer = null;
+    this.startTokenRefresh();
   }
 
   /**
@@ -136,8 +154,60 @@ class Conversation extends EventEmitter {
       }
     });
     this.wsStream.on('error', async error => {
-      this.emit(EVENTS.ERROR, { name: ERROR_CODES.wsError, error });
+      this.emit(
+        EVENTS.ERROR,
+        new ClientError({
+          message: ERROR_CODES.wsError,
+          error
+        })
+      );
     });
+  }
+
+  /**
+   * private set token information from token creation/refresh request
+   * @param expires_in {Number} token lifetime in s
+   * @param token {String} jwt token
+   * @param conversationId {String} conversation id of the ms conversation
+   */
+  setTokenInfo({ expires_in, token, conversationId }) {
+    this.expiresAt = new Date(Date.now() + expires_in * 1000).getTime();
+    this.token = token;
+    this.conversationId = conversationId;
+  }
+
+  /**
+   * Starts a new token refresh timer, note that will stop and overwrite the previous one if existing
+   */
+  startTokenRefresh() {
+    this.stopTokenRefresh();
+    this.refreshTimer = setTimeout(async () => {
+      try {
+        const { data } = await axios.post(
+          `${this.msDirectLineEndpoint}/tokens/refresh`,
+          {},
+          { headers: { Authorization: `Bearer ${this.token}` } }
+        );
+        this.setTokenInfo(data);
+        this.startTokenRefresh();
+      } catch (error) {
+        this.emit(
+          EVENTS.ERROR,
+          new ClientError({
+            message: ERROR_CODES.refreshError,
+            error
+          })
+        );
+      }
+    }, this.expiresAt - 60000 - Date.now()); // refresh 1 min prior to expiration...
+  }
+
+  /**
+   * Stop token refreshing
+   */
+  stopTokenRefresh() {
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
   }
 
   /**
@@ -150,12 +220,18 @@ class Conversation extends EventEmitter {
       await this.cleanupWsStream();
       this.createNewWsStream();
     } catch (error) {
-      this.emit(EVENTS.ERROR, { name: ERROR_CODES.wsReconnectErr, error });
+      this.emit(
+        EVENTS.ERROR,
+        new ClientError({
+          message: ERROR_CODES.wsReconnectErr,
+          error
+        })
+      );
     }
   }
 
   /**
-   * Cleanup this conversation, stop ws connection, polling, and unbind all event from this instance
+   * Cleanup this conversation, stop ws connection, polling, token refresh and unbind all event from this instance
    */
   cleanup() {
     this.cleaupState = true;
@@ -163,6 +239,8 @@ class Conversation extends EventEmitter {
       this.cleanupWsStream();
     }
     this.stopPolling();
+    this.stopTokenRefresh();
+    // unbind events at last, so we do not have unhandled error events...
     this.unbindEvents();
     this.cleaupState = false;
   }
@@ -186,7 +264,12 @@ class Conversation extends EventEmitter {
     const {
       data: { conversationId, token, streamUrl }
     } = await axios.get(
-      `${this.msDirectLineEndpoint}/conversations/${this.conversationId}?watermark=${this.watermarkId}`
+      `${this.msDirectLineEndpoint}/conversations/${this.conversationId}?watermark=${this.watermarkId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${this.token}`
+        }
+      }
     );
 
     this.conversationId = conversationId;
@@ -202,16 +285,15 @@ class Conversation extends EventEmitter {
    *
    * @param payload {Activity} activity object
    * @param startPolling {boolean} start polling if not started yet, default true
-   * @returns {Promise<void>} resolves on success else throws
+   * @returns {Promise<Object>} resolves with received response data from MS
    */
   async sendPayload(payload, startPolling = true) {
-    await axios.post(
+    const { data } = await axios.post(
       `${this.msDirectLineEndpoint}/conversations/${this.conversationId}/activities`,
       payload,
       {
         headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${this.token}`
         }
       }
     );
@@ -220,6 +302,8 @@ class Conversation extends EventEmitter {
     if (this.config.polling && !this.pollingTimer && startPolling) {
       await this.startPolling();
     }
+
+    return data;
   }
 
   /**
@@ -241,7 +325,7 @@ class Conversation extends EventEmitter {
    * Ends the current conversations and cleanups every ongoing data
    * https://docs.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-direct-line-3-0-end-conversation?view=azure-bot-service-4.0
    * @param cleanup {boolean} default true, cleanups conversation removes listeners stop polling etc
-   * @returns {Promise<void>}
+   * @returns {Promise<Object>} response from ms
    */
   async endConversation(cleanup = true) {
     const endConvPayload = {
@@ -250,11 +334,13 @@ class Conversation extends EventEmitter {
         id: this.userId
       }
     };
-    await this.sendPayload(endConvPayload);
+    const response = await this.sendPayload(endConvPayload);
+    // push it inside be cause we do not get anything from ms afterwards
     this.activities.push(endConvPayload);
     if (cleanup) {
       this.cleanup();
     }
+    return response;
   }
 
   /**
@@ -279,14 +365,17 @@ class Conversation extends EventEmitter {
           }
         }
       );
-      await this.processReceivedActivities(data);
+      this.processReceivedActivities(data);
       if (!direct) {
         // lazy polling each sec
         this.pollingTimer = setTimeout(this.pollNextResponse.bind(this), 1000);
       }
     } catch (error) {
       // cleanup and stop polling on polling error
-      this.emit(EVENTS.ERROR, { name: ERROR_CODES.pollingError, error });
+      this.emit(
+        EVENTS.ERROR,
+        new ClientError({ message: ERROR_CODES.pollingError, error })
+      );
     }
 
     return null;
