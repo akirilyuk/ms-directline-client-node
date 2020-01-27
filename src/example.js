@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: `${__dirname}/../.env` });
 const Conversation = require('./index');
 
 const delay = ms => {
@@ -40,7 +40,9 @@ const delay = ms => {
     await conversation.sendMessage('escalate');
     await delay(2000);
     await conversation.sendMessage('hi');
-    await conversation.endConversation(true);
+    await conversation.endConversation(false);
+    await delay(1000);
+    await conversation.cleanup();
   } catch (err) {
     console.log(err);
   }
