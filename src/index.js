@@ -17,17 +17,17 @@ const EVENTS = {
 };
 
 const ERROR_CODES = {
-  wsParsingFailed: 'ws-parsing-failed',
-  wsError: 'ws-error',
-  wsReconnectErr: 'reconnect-error',
-  pollingError: 'polling-error',
-  refreshError: 'session-refresh-error',
-  creationFailed: 'creationFailed'
+  wsParsingFailed: 'ws-parsing-failed', // parsing of data received via ws failed
+  wsError: 'ws-error', // general ws connection error
+  wsReconnectErr: 'reconnect-error', // recreating a new ws stream and reconnecting failed
+  pollingError: 'polling-error', // failed polling via HTTP GET
+  refreshError: 'token-refresh-error', // failed to refresh token
+  creationFailed: 'creationFailed' // failed to create object, mostly because conversation call failed
 };
 
 const defaultConfig = {
-  polling: false,
-  autoReconnect: true
+  polling: false, // disable polling per default
+  autoReconnect: true // reconnect ws connection on default
 };
 
 class Conversation extends EventEmitter {
