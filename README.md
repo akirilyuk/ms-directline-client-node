@@ -4,7 +4,7 @@ MS Directline v3 Node.js API implementation
 [Official Microsoft API reference](https://docs.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-direct-line-3-0-concepts?view=azure-bot-service-4.0)
 
 
-#Introduction
+# Introduction
 
 This is a work in progress simple MS Directline V3 API REST/WS Client.
 
@@ -101,7 +101,7 @@ const delay = ms => {
 })();
 ```
 
-#Todos
+# Todos
 
 * add full test coverage
 * add api documentation in README.MD
